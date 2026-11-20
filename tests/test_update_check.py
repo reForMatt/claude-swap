@@ -20,6 +20,20 @@ from claude_swap.update_check import (
 )
 
 
+_FORK_SPEC = "git+https://github.com/reForMatt/claude-swap@v1.1.0-reformatt.1"
+_FORK_UV_INSTALL = ["uv", "tool", "install", "--force", _FORK_SPEC]  # non-macOS
+_FORK_PIPX_INSTALL = ["pipx", "install", "--force", _FORK_SPEC]  # non-macOS
+
+
+@pytest.fixture(autouse=True)
+def _fork_tag(monkeypatch):
+    """The fork's upgrade resolves its tag with `git ls-remote` (a second
+    subprocess.run); pin it so these tests count only the installer call."""
+    monkeypatch.setattr(
+        "claude_swap.update_check._latest_fork_tag", lambda: "v1.1.0-reformatt.1"
+    )
+
+
 def _make_pypi_response(version: str) -> MagicMock:
     data = json.dumps({"info": {"version": version}}).encode()
     mock_resp = MagicMock()
@@ -617,7 +631,7 @@ class TestHeldBackReleaseNotice(_UvInstall):
         assert out.index("upgraded:") < out.index("is on PyPI")
         assert 'uv tool upgrade claude-swap --exclude-newer "0 days"' in out
         upgrade, listing = (c.args[0] for c in mock_run.call_args_list)
-        assert upgrade == ["uv", "tool", "upgrade", "claude-swap"]
+        assert upgrade == _FORK_UV_INSTALL
         assert listing[:4] == ["uv", "pip", "list", "--outdated"]
 
     @patch("claude_swap.update_check.subprocess.run")
@@ -670,7 +684,7 @@ class TestRunSelfUpgrade:
 
         assert run_self_upgrade() == 0
         mock_run.assert_called_once_with(
-            ["uv", "tool", "upgrade", "claude-swap"], check=False
+            _FORK_UV_INSTALL, check=False
         )
 
     @patch("claude_swap.update_check.subprocess.run")
@@ -681,7 +695,7 @@ class TestRunSelfUpgrade:
 
         assert run_self_upgrade() == 0
         mock_run.assert_called_once_with(
-            ["pipx", "upgrade", "claude-swap"], check=False
+            _FORK_PIPX_INSTALL, check=False
         )
 
     @patch("claude_swap.update_check.subprocess.run")
@@ -699,9 +713,9 @@ class TestRunSelfUpgrade:
         assert run_self_upgrade() == 1
         mock_run.assert_not_called()
         err = capsys.readouterr().err
-        assert "uv tool upgrade claude-swap" in err
-        assert "pipx upgrade claude-swap" in err
-        assert "pip install --upgrade claude-swap" in err
+        assert "uv tool install --force " + _FORK_SPEC in err
+        assert "pipx install --force " + _FORK_SPEC in err
+        assert "pip install --upgrade " + _FORK_SPEC in err
 
     @patch(
         "claude_swap.update_check.subprocess.run", side_effect=FileNotFoundError
@@ -789,7 +803,7 @@ class TestRunSelfUpgradeWindows:
         assert run_self_upgrade() == 1
         mock_run.assert_not_called()
         out = capsys.readouterr().out
-        assert "uv tool upgrade claude-swap" in out
+        assert "uv tool install --force " + _FORK_SPEC in out
 
     @patch("claude_swap.update_check.subprocess.run")
     @patch("claude_swap.update_check._detect_install_method", return_value="pipx")
@@ -797,7 +811,7 @@ class TestRunSelfUpgradeWindows:
         assert run_self_upgrade() == 1
         mock_run.assert_not_called()
         out = capsys.readouterr().out
-        assert "pipx upgrade claude-swap" in out
+        assert "pipx install --force " + _FORK_SPEC in out
 
     @patch("claude_swap.update_check.subprocess.run")
     @patch("claude_swap.update_check._detect_install_method", return_value=None)
@@ -805,9 +819,9 @@ class TestRunSelfUpgradeWindows:
         assert run_self_upgrade() == 1
         mock_run.assert_not_called()
         err = capsys.readouterr().err
-        assert "uv tool upgrade claude-swap" in err
-        assert "pipx upgrade claude-swap" in err
-        assert "pip install --upgrade claude-swap" in err
+        assert "uv tool install --force " + _FORK_SPEC in err
+        assert "pipx install --force " + _FORK_SPEC in err
+        assert "pip install --upgrade " + _FORK_SPEC in err
 
 
 # --- build identity + the menu bar restart after an upgrade ------------------

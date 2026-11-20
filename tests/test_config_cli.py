@@ -91,7 +91,7 @@ class TestConfigList:
         assert by_key["autoswitch.weeklyThreshold"]["value"] is None
         assert by_key["autoswitch.weeklyThreshold"]["isSet"] is False
         assert by_key["autoswitch.includeApiKeyAccounts"]["value"] is False
-        assert by_key["updates.check"]["value"] is True
+        assert by_key["updates.check"]["value"] is False  # fork default
         assert payload["unrecognized"] == []
 
     def test_list_warns_about_keys_nothing_reads(self, temp_home, capsys):
