@@ -100,3 +100,39 @@ def test_upgrade_installs_from_reformatt_git_tag_never_pypi(monkeypatch, method)
     # no PyPI spec: no bare package name argument anywhere in the command
     assert "claude-swap" not in cmd, cmd
     assert not any(re.fullmatch(r"claude-swap([<>=!~].*)?", a) for a in cmd), cmd
+
+
+def _upgrade_with_ref(monkeypatch, ref, capsys=None):
+    """Run run_self_upgrade(ref=...) under uv on linux; returns (rc, calls)."""
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(update_check, "_detect_install_method", lambda: "uv")
+    monkeypatch.setattr(update_check, "_installed_version_on_disk", lambda: None)
+    monkeypatch.setattr(update_check, "install_identity", lambda: {})
+    monkeypatch.setattr(update_check, "held_back_release_notice", lambda v: None)
+    ran: list[list[str]] = []
+
+    def fake_run(cmd, *args, **kwargs):
+        ran.append(list(cmd))
+        return MagicMock(returncode=0, stdout=TAGS)
+
+    monkeypatch.setattr(update_check.subprocess, "run", fake_run)
+    return update_check.run_self_upgrade("1.1.0", ref=ref), ran
+
+
+@pytest.mark.parametrize(
+    "ref",
+    ["v1.1.0", "main", "v1.1.0-reformatt.1; rm -rf /", "v1.1.0-reformatt.x"],
+)
+def test_explicit_non_fork_ref_is_refused_and_runs_no_installer(monkeypatch, ref):
+    rc, ran = _upgrade_with_ref(monkeypatch, ref)
+    assert rc == 1
+    assert [c for c in ran if c[0] in ("uv", "pipx")] == [], ran
+
+
+def test_explicit_fork_ref_installs_it_without_ls_remote(monkeypatch):
+    rc, ran = _upgrade_with_ref(monkeypatch, "v1.2.0-reformatt.3")
+    assert rc == 0
+    assert not [c for c in ran if c[0] == "git"], ran
+    installs = [c for c in ran if c[0] in ("uv", "pipx")]
+    assert len(installs) == 1, ran
+    assert installs[0][-1] == FORK_URL + "@v1.2.0-reformatt.3"
