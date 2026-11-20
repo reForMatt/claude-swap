@@ -424,7 +424,8 @@ def _restart_menubar_if_rebuilt(before: dict) -> None:
 
 
 FORK_REPO = "https://github.com/reForMatt/claude-swap"
-_FORK_TAG = re.compile(r"refs/tags/(v(\d+)\.(\d+)\.(\d+)-reformatt\.(\d+))$")
+_FORK_REF = r"v(\d+)\.(\d+)\.(\d+)-reformatt\.(\d+)"
+_FORK_TAG = re.compile(rf"refs/tags/({_FORK_REF})$")
 
 
 def _latest_fork_tag() -> str | None:
@@ -464,13 +465,16 @@ def run_self_upgrade(current_version: str | None = None, ref: str | None = None)
     before_identity = install_identity()
 
     method = _detect_install_method()
+    if ref is not None and not re.fullmatch(_FORK_REF, ref):
+        error(f"--ref must match {_FORK_REF} (a reForMatt fork tag); got {ref!r}.")
+        return 1
     ref = ref or _latest_fork_tag()
     if ref is None:
         error(f"No v*-reformatt.* tag found at {FORK_REPO}; pass --ref <tag>.")
         return 1
     spec = f"git+{FORK_REPO}@{ref}"
-    # rumps is the [menubar] extra; neither installer accepts an extra next to
-    # a bare git spec, so add it explicitly on macOS (the only place it runs).
+    # rumps is the [menubar] extra, passed as --with / --pip-args (same for
+    # both installers) on macOS, the only place it runs.
     mac = sys.platform == "darwin"
     commands = {
         "uv": ["uv", "tool", "install", "--force"]
