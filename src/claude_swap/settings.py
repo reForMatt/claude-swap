@@ -105,7 +105,7 @@ class UpdateSettings:
     PyPI lookup behind the "newer version available" hint on or off;
     ``cswap upgrade`` works either way."""
 
-    check: bool = True
+    check: bool = False  # fork: no PyPI lookup unless opted in
 
 
 @dataclass(frozen=True)

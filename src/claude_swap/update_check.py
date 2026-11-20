@@ -423,7 +423,28 @@ def _restart_menubar_if_rebuilt(before: dict) -> None:
     print(f"Menu bar restarted onto {describe_identity(after)} (was pid {pid}).")
 
 
-def run_self_upgrade(current_version: str | None = None) -> int:
+FORK_REPO = "https://github.com/reForMatt/claude-swap"
+_FORK_TAG = re.compile(r"refs/tags/(v(\d+)\.(\d+)\.(\d+)-reformatt\.(\d+))$")
+
+
+def _latest_fork_tag() -> str | None:
+    """Newest ``v*-reformatt.*`` tag on the fork (never PyPI), or None."""
+    try:
+        out = subprocess.run(
+            ["git", "ls-remote", "--tags", FORK_REPO],
+            capture_output=True, text=True, timeout=30, check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    tags = []
+    for line in str(out).splitlines():
+        m = _FORK_TAG.search(line.strip())
+        if m:
+            tags.append((tuple(int(g) for g in m.groups()[1:]), m.group(1)))
+    return max(tags)[1] if tags else None
+
+
+def run_self_upgrade(current_version: str | None = None, ref: str | None = None) -> int:
     """Run the appropriate upgrade command for the current install method.
 
     Returns the subprocess exit code, or 1 if detection failed or the package
@@ -443,9 +464,19 @@ def run_self_upgrade(current_version: str | None = None) -> int:
     before_identity = install_identity()
 
     method = _detect_install_method()
+    ref = ref or _latest_fork_tag()
+    if ref is None:
+        error(f"No v*-reformatt.* tag found at {FORK_REPO}; pass --ref <tag>.")
+        return 1
+    spec = f"git+{FORK_REPO}@{ref}"
+    # rumps is the [menubar] extra; neither installer accepts an extra next to
+    # a bare git spec, so add it explicitly on macOS (the only place it runs).
+    mac = sys.platform == "darwin"
     commands = {
-        "uv": ["uv", "tool", "upgrade", "claude-swap"],
-        "pipx": ["pipx", "upgrade", "claude-swap"],
+        "uv": ["uv", "tool", "install", "--force"]
+        + (["--with", "rumps>=0.4.0"] if mac else []) + [spec],
+        "pipx": ["pipx", "install", "--force"]
+        + (["--pip-args=rumps>=0.4.0"] if mac else []) + [spec],
     }
     cmd = commands.get(method or "")
     if cmd is None:
@@ -454,9 +485,9 @@ def run_self_upgrade(current_version: str | None = None) -> int:
             f"  sys.prefix:     {sys.prefix}\n"
             f"  sys.executable: {sys.executable}\n"
             "To upgrade manually, run one of:\n"
-            "  uv tool upgrade claude-swap\n"
-            "  pipx upgrade claude-swap\n"
-            f"  {sys.executable} -m pip install --upgrade claude-swap\n"
+            f"  uv tool install --force {spec}\n"
+            f"  pipx install --force {spec}\n"
+            f"  {sys.executable} -m pip install --upgrade {spec}\n"
             "If you installed with `pip install -e .`, use `git pull` instead."
         )
         return 1
@@ -473,6 +504,7 @@ def run_self_upgrade(current_version: str | None = None) -> int:
                 warning(notice)
         return 1
 
+    print(f"Running: {' '.join(cmd)}")
     try:
         result = subprocess.run(cmd, check=False)
     except FileNotFoundError:

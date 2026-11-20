@@ -1755,6 +1755,7 @@ The original flag spellings (%(prog)s --switch, %(prog)s --list, ...) keep worki
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument("--ref", help="fork tag for upgrade (default: newest v*-reformatt.*)")
     group.add_argument(
         "--add-token",
         metavar="TOKEN|-",
@@ -1883,7 +1884,7 @@ The original flag spellings (%(prog)s --switch, %(prog)s --list, ...) keep worki
         from claude_swap.update_check import run_self_upgrade
 
         try:
-            sys.exit(run_self_upgrade())
+            sys.exit(run_self_upgrade(ref=args.ref))
         except KeyboardInterrupt:
             print(f"\n{dimmed('Upgrade cancelled')}")
             sys.exit(130)
